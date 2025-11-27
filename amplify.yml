@@ -1,0 +1,10 @@
+version: 1
+frontend:
+  phases:
+    build:
+      commands:
+        - echo "No build step required for static HTML"
+  artifacts:
+    baseDirectory: .
+    files:
+      - '**/*'

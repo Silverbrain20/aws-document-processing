@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Document Processing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script type="module">
+        import { S3Client, PutObjectCommand } from 'https://cdn.skypack.dev/@aws-sdk/client-s3';
+        import { TextractClient, DetectDocumentTextCommand } from 'https://cdn.skypack.dev/@aws-sdk/client-textract';
+        
+        // AWS Configuration
+        const AWS_REGION = 'us-east-2';
+        const S3_BUCKET = 'aws-idp-system-documents-raw-774305598371-dev';
+        
+        // Initialize AWS clients with default credentials
+        const s3Client = new S3Client({ region: AWS_REGION });
+        const textractClient = new TextractClient({ region: AWS_REGION });
+        
+        let startTime;
+        
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // File input handling
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('uploadText').innerHTML = `
+                    <i data-lucide="file" class="w-12 h-12 mx-auto text-blue-500 mb-3"></i>
+                    <p class="text-blue-600 font-medium">${file.name}</p>
+                    <p class="text-gray-500 text-sm">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                `;
+                lucide.createIcons();
+            }
+        });
+        
+        // Form submission
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            startTime = Date.now();
+            showProcessing();
+            
+            try {
+                // Upload to S3
+                const key = `uploads/${Date.now()}_${file.name}`;
+                const uploadCommand = new PutObjectCommand({
+                    Bucket: S3_BUCKET,
+                    Key: key,
+                    Body: file,
+                    ContentType: file.type
+                });
+                
+                await s3Client.send(uploadCommand);
+                
+                // Process with Textract
+                const textractCommand = new DetectDocumentTextCommand({
+                    Document: {
+                        S3Object: {
+                            Bucket: S3_BUCKET,
+                            Name: key
+                        }
+                    }
+                });
+                
+                const textractResponse = await textractClient.send(textractCommand);
+                const extractedText = textractResponse.Blocks
+                    .filter(block => block.BlockType === 'LINE')
+                    .map(block => block.Text)
+                    .join(' ');
+                
+                hideProcessing();
+                showResults({
+                    status: 'success',
+                    document_id: key,
+                    text: extractedText,
+                    filename: file.name,
+                    word_count: extractedText.split(' ').length
+                });
+                
+            } catch (error) {
+                hideProcessing();
+                showError('Processing failed: ' + error.message);
+            }
+        });
+        
+        function showProcessing() {
+            document.getElementById('processingStatus').classList.remove('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('processBtn').disabled = true;
+        }
+        
+        function hideProcessing() {
+            document.getElementById('processingStatus').classList.add('hidden');
+            document.getElementById('processBtn').disabled = false;
+        }
+        
+        function showResults(result) {
+            const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            
+            document.getElementById('wordCount').textContent = result.word_count;
+            document.getElementById('processingTime').textContent = processingTime + 's';
+            document.getElementById('extractedText').textContent = result.text || 'No text extracted';
+            
+            document.getElementById('resultsSection').classList.remove('hidden');
+        }
+        
+        function showError(message) {
+            alert(message);
+        }
+        
+        // Make functions global
+        window.showProcessing = showProcessing;
+        window.hideProcessing = hideProcessing;
+        window.showResults = showResults;
+        window.showError = showError;
+    </script>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-600 to-purple-600 text-white py-6 shadow-lg">
+        <div class="container mx-auto px-6">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="file-text" class="w-8 h-8"></i>
+                <h1 class="text-3xl font-bold">AWS Document Processing</h1>
+            </div>
+            <p class="mt-2 text-blue-100">Intelligent OCR with AWS SDK</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+            <div class="text-center mb-6">
+                <i data-lucide="upload-cloud" class="w-16 h-16 mx-auto text-blue-500 mb-4"></i>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Upload Document</h2>
+                <p class="text-gray-600">Select files for OCR processing</p>
+            </div>
+            
+            <form id="uploadForm" class="space-y-6">
+                <div class="border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-500 cursor-pointer" 
+                     onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                    <div id="uploadText">
+                        <i data-lucide="file-plus" class="w-12 h-12 mx-auto text-gray-400 mb-3"></i>
+                        <p class="text-gray-600">Click to select files</p>
+                    </div>
+                </div>
+                
+                <button type="submit" id="processBtn" 
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300">
+                    Process Document
+                </button>
+            </form>
+        </div>
+
+        <!-- Processing Status -->
+        <div id="processingStatus" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
+            <div class="flex items-center space-x-3">
+                <div class="animate-spin w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full"></div>
+                <span class="text-blue-700 font-medium">Processing document...</span>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <div class="bg-white rounded-xl shadow-lg p-8 mb-8">
+                <div class="flex items-center space-x-3 mb-6">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-green-500"></i>
+                    <h3 class="text-xl font-bold text-gray-800">Extraction Results</h3>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="type" class="w-5 h-5 text-blue-600"></i>
+                            <span class="text-blue-800 font-medium">Word Count</span>
+                        </div>
+                        <p class="text-blue-700 mt-1" id="wordCount">-</p>
+                    </div>
+                    
+                    <div class="bg-purple-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="clock" class="w-5 h-5 text-purple-600"></i>
+                            <span class="text-purple-800 font-medium">Processing Time</span>
+                        </div>
+                        <p class="text-purple-700 mt-1" id="processingTime">-</p>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 rounded-lg p-6">
+                    <h4 class="font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                        <i data-lucide="text" class="w-5 h-5"></i>
+                        <span>Extracted Text</span>
+                    </h4>
+                    <div id="extractedText" class="bg-white p-4 rounded border max-h-64 overflow-y-auto text-gray-700 leading-relaxed"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

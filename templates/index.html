@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS IDP System - Document Processing</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .upload-area {
+            border: 2px dashed #007bff;
+            border-radius: 10px;
+            padding: 40px;
+            text-align: center;
+            background-color: #f8f9fa;
+            transition: all 0.3s ease;
+        }
+        .upload-area:hover {
+            border-color: #0056b3;
+            background-color: #e3f2fd;
+        }
+        .upload-area.dragover {
+            border-color: #28a745;
+            background-color: #d4edda;
+        }
+        .processing-status {
+            display: none;
+        }
+        .results-section {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="fas fa-file-alt me-2"></i>AWS IDP System
+            </a>
+            <div class="navbar-nav ms-auto">
+                <a class="nav-link" href="/dashboard">Dashboard</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-8 mx-auto">
+                <div class="card">
+                    <div class="card-header">
+                        <h4><i class="fas fa-upload me-2"></i>Document Upload & Processing</h4>
+                    </div>
+                    <div class="card-body">
+                        <!-- Upload Form -->
+                        <form id="uploadForm" enctype="multipart/form-data">
+                            <div class="upload-area mb-3" id="uploadArea">
+                                <i class="fas fa-cloud-upload-alt fa-3x text-primary mb-3"></i>
+                                <h5>Drag & Drop your document here</h5>
+                                <p class="text-muted">or click to browse files</p>
+                                <input type="file" id="fileInput" name="file" class="d-none" 
+                                       accept=".pdf,.jpg,.jpeg,.png,.tiff,.bmp">
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="documentType" class="form-label">Document Type</label>
+                                    <select class="form-select" id="documentType" name="document_type">
+                                        <option value="general">General Document</option>
+                                        <option value="invoice">Invoice</option>
+                                        <option value="medical">Medical Record</option>
+                                        <option value="contract">Contract</option>
+                                        <option value="form">Form</option>
+                                        <option value="handwritten">Handwritten Document</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Selected File</label>
+                                    <div id="selectedFile" class="form-control bg-light">No file selected</div>
+                                </div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary btn-lg w-100" id="uploadBtn">
+                                <i class="fas fa-upload me-2"></i>Upload & Process Document
+                            </button>
+                        </form>
+
+                        <!-- Processing Status -->
+                        <div class="processing-status mt-4" id="processingStatus">
+                            <div class="alert alert-info">
+                                <div class="d-flex align-items-center">
+                                    <div class="spinner-border spinner-border-sm me-3" role="status"></div>
+                                    <div>
+                                        <strong>Processing Document...</strong>
+                                        <div class="small">Document ID: <span id="documentId"></span></div>
+                                        <div class="small">Status: <span id="currentStatus">Initializing</span></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="progress mb-3">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     id="progressBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <!-- Results Section -->
+                        <div class="results-section mt-4" id="resultsSection">
+                            <div class="alert alert-success">
+                                <i class="fas fa-check-circle me-2"></i>
+                                <strong>Processing Complete!</strong>
+                            </div>
+                            
+                            <div class="row mb-3">
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <h5 class="card-title text-primary" id="confidenceScore">0%</h5>
+                                            <p class="card-text small">Confidence</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <h5 class="card-title text-info" id="pageCount">0</h5>
+                                            <p class="card-text small">Pages</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <h5 class="card-title text-success" id="entityCount">0</h5>
+                                            <p class="card-text small">Entities</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="card text-center">
+                                        <div class="card-body">
+                                            <h5 class="card-title text-warning" id="processingTime">0s</h5>
+                                            <p class="card-text small">Time</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <ul class="nav nav-tabs" id="resultsTabs">
+                                <li class="nav-item">
+                                    <a class="nav-link active" data-bs-toggle="tab" href="#textTab">
+                                        <i class="fas fa-file-text me-1"></i>Extracted Text
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" data-bs-toggle="tab" href="#entitiesTab">
+                                        <i class="fas fa-tags me-1"></i>Entities
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" data-bs-toggle="tab" href="#tablesTab">
+                                        <i class="fas fa-table me-1"></i>Tables
+                                    </a>
+                                </li>
+                                <li class="nav-item">
+                                    <a class="nav-link" data-bs-toggle="tab" href="#formsTab">
+                                        <i class="fas fa-wpforms me-1"></i>Forms
+                                    </a>
+                                </li>
+                            </ul>
+
+                            <div class="tab-content mt-3">
+                                <div class="tab-pane fade show active" id="textTab">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <pre id="extractedText" class="small" style="max-height: 400px; overflow-y: auto;"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="entitiesTab">
+                                    <div id="entitiesList"></div>
+                                </div>
+                                <div class="tab-pane fade" id="tablesTab">
+                                    <div class="card">
+                                        <div class="card-body">
+                                            <pre id="tablesContent" class="small" style="max-height: 400px; overflow-y: auto;"></pre>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="tab-pane fade" id="formsTab">
+                                    <div id="formsContent"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let currentDocumentId = null;
+        let statusCheckInterval = null;
+
+        // File upload handling
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const selectedFile = document.getElementById('selectedFile');
+        const uploadForm = document.getElementById('uploadForm');
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            fileInput.files = e.dataTransfer.files;
+            updateSelectedFile();
+        });
+
+        fileInput.addEventListener('change', updateSelectedFile);
+
+        function updateSelectedFile() {
+            if (fileInput.files.length > 0) {
+                const file = fileInput.files[0];
+                selectedFile.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            } else {
+                selectedFile.textContent = 'No file selected';
+            }
+        }
+
+        // Form submission
+        uploadForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            if (fileInput.files.length === 0) {
+                alert('Please select a file to upload');
+                return;
+            }
+
+            const formData = new FormData(uploadForm);
+            const uploadBtn = document.getElementById('uploadBtn');
+            
+            uploadBtn.disabled = true;
+            uploadBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Uploading...';
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    currentDocumentId = result.document_id;
+                    document.getElementById('documentId').textContent = currentDocumentId;
+                    document.getElementById('processingStatus').style.display = 'block';
+                    startStatusChecking();
+                } else {
+                    alert('Upload failed: ' + result.error);
+                }
+            } catch (error) {
+                alert('Upload failed: ' + error.message);
+            } finally {
+                uploadBtn.disabled = false;
+                uploadBtn.innerHTML = '<i class="fas fa-upload me-2"></i>Upload & Process Document';
+            }
+        });
+
+        function startStatusChecking() {
+            let progress = 0;
+            const progressBar = document.getElementById('progressBar');
+            const statusElement = document.getElementById('currentStatus');
+
+            statusCheckInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/status/${currentDocumentId}`);
+                    const status = await response.json();
+
+                    statusElement.textContent = status.status;
+
+                    // Update progress based on status
+                    switch (status.status) {
+                        case 'preprocessing':
+                            progress = 20;
+                            break;
+                        case 'textract':
+                            progress = 40;
+                            break;
+                        case 'comprehend':
+                            progress = 60;
+                            break;
+                        case 'indexing':
+                            progress = 80;
+                            break;
+                        case 'completed':
+                            progress = 100;
+                            clearInterval(statusCheckInterval);
+                            loadResults();
+                            break;
+                        case 'failed':
+                            progress = 100;
+                            clearInterval(statusCheckInterval);
+                            showError('Processing failed');
+                            break;
+                    }
+
+                    progressBar.style.width = progress + '%';
+                } catch (error) {
+                    console.error('Status check failed:', error);
+                }
+            }, 2000);
+        }
+
+        async function loadResults() {
+            try {
+                const response = await fetch(`/results/${currentDocumentId}`);
+                const results = await response.json();
+
+                if (response.ok) {
+                    displayResults(results);
+                } else {
+                    showError('Failed to load results: ' + results.error);
+                }
+            } catch (error) {
+                showError('Failed to load results: ' + error.message);
+            }
+        }
+
+        function displayResults(results) {
+            document.getElementById('processingStatus').style.display = 'none';
+            document.getElementById('resultsSection').style.display = 'block';
+
+            // Update summary cards
+            document.getElementById('confidenceScore').textContent = Math.round(results.confidence_score * 100) + '%';
+            document.getElementById('pageCount').textContent = results.page_count;
+            document.getElementById('entityCount').textContent = results.entities.length;
+            document.getElementById('processingTime').textContent = '~6s';
+
+            // Update tabs
+            document.getElementById('extractedText').textContent = results.raw_text || 'No text extracted';
+            document.getElementById('tablesContent').textContent = results.tables || 'No tables found';
+
+            // Display entities
+            const entitiesList = document.getElementById('entitiesList');
+            entitiesList.innerHTML = '';
+            results.entities.forEach(entity => {
+                const entityCard = document.createElement('div');
+                entityCard.className = 'card mb-2';
+                entityCard.innerHTML = `
+                    <div class="card-body py-2">
+                        <div class="d-flex justify-content-between">
+                            <span><strong>${entity.text}</strong></span>
+                            <span class="badge bg-primary">${entity.type}</span>
+                        </div>
+                        <small class="text-muted">Confidence: ${Math.round(entity.score * 100)}%</small>
+                    </div>
+                `;
+                entitiesList.appendChild(entityCard);
+            });
+
+            // Display forms
+            const formsContent = document.getElementById('formsContent');
+            formsContent.innerHTML = '';
+            Object.entries(results.forms).forEach(([key, value]) => {
+                const formCard = document.createElement('div');
+                formCard.className = 'card mb-2';
+                formCard.innerHTML = `
+                    <div class="card-body py-2">
+                        <div class="row">
+                            <div class="col-md-4"><strong>${key}:</strong></div>
+                            <div class="col-md-8">${value}</div>
+                        </div>
+                    </div>
+                `;
+                formsContent.appendChild(formCard);
+            });
+        }
+
+        function showError(message) {
+            document.getElementById('processingStatus').innerHTML = `
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    <strong>Error:</strong> ${message}
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

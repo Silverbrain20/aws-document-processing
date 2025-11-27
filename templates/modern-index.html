@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Intelligent Document Processing App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <style>
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .card-shadow { box-shadow: 0 10px 25px rgba(0,0,0,0.1); }
+        .upload-area { transition: all 0.3s ease; }
+        .upload-area:hover { transform: translateY(-2px); }
+        .processing { animation: pulse 2s infinite; }
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        @media (max-width: 768px) {
+            .container { padding-left: 1rem; padding-right: 1rem; }
+            .upload-area { padding: 2rem 1rem; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-6 shadow-lg">
+        <div class="container mx-auto px-6">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="file-text" class="w-8 h-8"></i>
+                <h1 class="text-3xl font-bold">Intelligent Document Processing App</h1>
+            </div>
+            <p class="mt-2 text-blue-100">Intelligent OCR with AWS</p>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-xl card-shadow p-8 mb-8">
+            <div class="text-center mb-6">
+                <i data-lucide="upload-cloud" class="w-16 h-16 mx-auto text-blue-500 mb-4"></i>
+                <h2 class="text-2xl font-bold text-gray-800 mb-2">Upload Document</h2>
+                <p class="text-gray-600">Drag & drop or click to select files (PDF, JPG, PNG)</p>
+            </div>
+            
+            <form id="uploadForm" enctype="multipart/form-data" class="space-y-6">
+                <div class="upload-area border-2 border-dashed border-blue-300 rounded-lg p-8 text-center hover:border-blue-500 cursor-pointer" 
+                     onclick="document.getElementById('fileInput').click()">
+                    <input type="file" id="fileInput" accept=".pdf,.jpg,.jpeg,.png" class="hidden">
+                    <div id="uploadText">
+                        <i data-lucide="file-plus" class="w-12 h-12 mx-auto text-gray-400 mb-3"></i>
+                        <p class="text-gray-600">Click here or drag files to upload</p>
+                    </div>
+                </div>
+                
+                <button type="submit" id="processBtn" 
+                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-300 flex items-center justify-center space-x-2">
+                    <i data-lucide="zap" class="w-5 h-5"></i>
+                    <span>Process Document</span>
+                </button>
+            </form>
+        </div>
+
+        <!-- Processing Status -->
+        <div id="processingStatus" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-6 mb-8">
+            <div class="flex items-center space-x-3">
+                <div class="processing w-6 h-6 bg-blue-500 rounded-full"></div>
+                <span class="text-blue-700 font-medium">Processing document...</span>
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div id="resultsSection" class="hidden">
+            <div class="bg-white rounded-xl card-shadow p-8 mb-8">
+                <div class="flex items-center space-x-3 mb-6">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-green-500"></i>
+                    <h3 class="text-xl font-bold text-gray-800">Extraction Results</h3>
+                </div>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-6">
+                    <div class="bg-green-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="file-check" class="w-5 h-5 text-green-600"></i>
+                            <span class="text-green-800 font-medium">Status</span>
+                        </div>
+                        <p class="text-green-700 mt-1" id="resultStatus">Completed</p>
+                    </div>
+                    
+                    <div class="bg-blue-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="type" class="w-5 h-5 text-blue-600"></i>
+                            <span class="text-blue-800 font-medium">Word Count</span>
+                        </div>
+                        <p class="text-blue-700 mt-1" id="wordCount">-</p>
+                    </div>
+                    
+                    <div class="bg-purple-50 p-4 rounded-lg">
+                        <div class="flex items-center space-x-2">
+                            <i data-lucide="clock" class="w-5 h-5 text-purple-600"></i>
+                            <span class="text-purple-800 font-medium">Processing Time</span>
+                        </div>
+                        <p class="text-purple-700 mt-1" id="processingTime">-</p>
+                    </div>
+                </div>
+                
+                <div class="bg-gray-50 rounded-lg p-6">
+                    <h4 class="font-semibold text-gray-800 mb-3 flex items-center space-x-2">
+                        <i data-lucide="text" class="w-5 h-5"></i>
+                        <span>Extracted Text</span>
+                    </h4>
+                    <div id="extractedText" class="bg-white p-4 rounded border max-h-64 overflow-y-auto text-gray-700 leading-relaxed"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Documents History -->
+        <div class="bg-white rounded-xl card-shadow p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center space-x-3">
+                    <i data-lucide="history" class="w-6 h-6 text-gray-600"></i>
+                    <h3 class="text-xl font-bold text-gray-800">Recent Documents</h3>
+                </div>
+                <button onclick="loadDocuments()" class="text-blue-600 hover:text-blue-800 flex items-center space-x-1">
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span>Refresh</span>
+                </button>
+            </div>
+            
+            <div id="documentsGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div class="text-center py-8 text-gray-500">
+                    <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+                    <p>No documents processed yet</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let startTime;
+        
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // File input handling
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                document.getElementById('uploadText').innerHTML = `
+                    <i data-lucide="file" class="w-12 h-12 mx-auto text-blue-500 mb-3"></i>
+                    <p class="text-blue-600 font-medium">${file.name}</p>
+                    <p class="text-gray-500 text-sm">${(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                `;
+                lucide.createIcons();
+            }
+        });
+        
+        // Form submission
+        document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fileInput = document.getElementById('fileInput');
+            const file = fileInput.files[0];
+            
+            if (!file) {
+                alert('Please select a file first');
+                return;
+            }
+            
+            startTime = Date.now();
+            showProcessing();
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                hideProcessing();
+                
+                if (result.status === 'success') {
+                    showResults(result);
+                    loadDocuments();
+                } else {
+                    showError(result.message);
+                }
+            } catch (error) {
+                hideProcessing();
+                showError('Upload failed: ' + error.message);
+            }
+        });
+        
+        function showProcessing() {
+            document.getElementById('processingStatus').classList.remove('hidden');
+            document.getElementById('resultsSection').classList.add('hidden');
+            document.getElementById('processBtn').disabled = true;
+            document.getElementById('processBtn').innerHTML = `
+                <div class="processing w-5 h-5 bg-white rounded-full mr-2"></div>
+                Processing...
+            `;
+        }
+        
+        function hideProcessing() {
+            document.getElementById('processingStatus').classList.add('hidden');
+            document.getElementById('processBtn').disabled = false;
+            document.getElementById('processBtn').innerHTML = `
+                <i data-lucide="zap" class="w-5 h-5"></i>
+                <span>Process Document</span>
+            `;
+            lucide.createIcons();
+        }
+        
+        function showResults(result) {
+            const processingTime = ((Date.now() - startTime) / 1000).toFixed(1);
+            
+            document.getElementById('wordCount').textContent = result.word_count || 0;
+            document.getElementById('processingTime').textContent = processingTime + 's';
+            document.getElementById('extractedText').textContent = result.text || 'No text extracted';
+            
+            document.getElementById('resultsSection').classList.remove('hidden');
+        }
+        
+        function showError(message) {
+            alert('Error: ' + message);
+        }
+        
+        async function loadDocuments() {
+            try {
+                const response = await fetch('/documents');
+                const docs = await response.json();
+                
+                const grid = document.getElementById('documentsGrid');
+                
+                if (docs.length === 0) {
+                    grid.innerHTML = `
+                        <div class="text-center py-8 text-gray-500">
+                            <i data-lucide="inbox" class="w-12 h-12 mx-auto mb-3 text-gray-300"></i>
+                            <p>No documents processed yet</p>
+                        </div>
+                    `;
+                } else {
+                    grid.innerHTML = docs.map(doc => `
+                        <div class="border rounded-lg p-4 hover:shadow-md transition duration-300">
+                            <div class="flex items-start justify-between mb-3">
+                                <div class="flex items-center space-x-2">
+                                    <i data-lucide="file-text" class="w-5 h-5 text-blue-500"></i>
+                                    <span class="font-medium text-gray-800">${doc.filename || doc.document_id}</span>
+                                </div>
+                                <span class="text-xs text-gray-500">${new Date(doc.timestamp).toLocaleDateString()}</span>
+                            </div>
+                            <p class="text-gray-600 text-sm line-clamp-3">${(doc.extracted_text || '').substring(0, 150)}...</p>
+                        </div>
+                    `).join('');
+                }
+                
+                lucide.createIcons();
+            } catch (error) {
+                console.error('Failed to load documents:', error);
+            }
+        }
+        
+        // Load documents on page load
+        loadDocuments();
+    </script>
+</body>
+</html>
